@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI System Console (Responsive)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #000000;
+            --sidebar-bg: #0a0a0a;
+            --text-color: #ffffff;
+            --text-muted-color: #888888;
+            --border-color: #333333;
+            --user-bubble-bg: #ffffff;
+            --user-bubble-text: #000000;
+            --ai-bubble-bg: #1a1a1a;
+            --font-family: 'Roboto Mono', monospace;
+        }
+        * { box-sizing: border-box; }
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+        .app-container {
+            display: grid;
+            /* サイドバーは最低320px、最大で画面幅の25%まで。残りがチャットエリア */
+            grid-template-columns: minmax(320px, 25%) 1fr;
+            height: 100vh;
+        }
+        /* Sidebar */
+        .sidebar {
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--border-color);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
+        }
+        .status-block {
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 15px;
+        }
+        .status-block h3 {
+            margin: 0 0 15px 0; font-size: 14px; color: var(--text-muted-color);
+            border-bottom: 1px solid var(--border-color); padding-bottom: 10px;
+        }
+        .status-item { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 10px; }
+        .status-item span:first-child { color: var(--text-muted-color); }
+        #status-indicator.online { color: #ffffff; font-weight: bold; }
+        #status-indicator.thinking, #status-indicator.error, #status-indicator.limited { font-weight: bold; animation: blink 1s infinite; }
+        #status-indicator.thinking { color: #ffffff; }
+        #status-indicator.limited, #status-indicator.error { color: #ff4d4d; }
+        @keyframes blink { 50% { opacity: 0.6; } }
+
+        /* Graph */
+        .graph-container { display: flex; align-items: flex-end; height: 60px; width: 100%; gap: 2px; padding-top: 10px; }
+        .graph-bar { flex-grow: 1; background-color: #666; transition: height 0.2s ease-out; }
+
+        /* Chat Container */
+        .chat-container { display: flex; flex-direction: column; overflow: hidden; position: relative; }
+        .chat-messages { flex-grow: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+        .chat-messages::-webkit-scrollbar { width: 6px; }
+        .chat-messages::-webkit-scrollbar-track { background: var(--bg-color); }
+        .chat-messages::-webkit-scrollbar-thumb { background-color: var(--border-color); }
+
+        .message { display: flex; max-width: 80%; animation: fadeIn 0.3s ease; flex-direction: column; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .message-header { font-size: 12px; color: var(--text-muted-color); margin-bottom: 6px; }
+        .message-bubble { padding: 12px 16px; border-radius: 6px; line-height: 1.7; white-space: pre-wrap; word-wrap: break-word; }
+        .user-message { align-self: flex-end; }
+        .user-message .message-header { text-align: right; }
+        .user-message .message-bubble { background-color: var(--user-bubble-bg); color: var(--user-bubble-text); }
+        .ai-message { align-self: flex-start; }
+        .ai-message .message-bubble { background-color: var(--ai-bubble-bg); border: 1px solid var(--border-color); }
+
+        /* Input & Footer */
+        .chat-input-form { display: flex; padding: 15px; border-top: 1px solid var(--border-color); }
+        #userInput {
+            flex-grow: 1; background-color: var(--bg-color); border: 1px solid var(--border-color);
+            border-radius: 4px; color: var(--text-color); padding: 12px; font-family: var(--font-family);
+            font-size: 16px; resize: none; margin-right: 10px;
+        }
+        #userInput:focus { outline: none; border-color: var(--text-color); }
+        #sendBtn {
+            background-color: var(--text-color); color: var(--bg-color); border: none;
+            border-radius: 4px; padding: 0 20px; cursor: pointer; font-size: 14px; font-weight: bold;
+        }
+        #sendBtn:disabled { background-color: #555; color: #888; }
+        .footer { padding: 5px 15px; text-align: right; font-size: 10px; color: var(--text-muted-color); border-top: 1px solid var(--border-color); }
+
+        /* ★★★★★★★★★★★ レスポンシブ対応 ★★★★★★★★★★★ */
+        /* 1024px以下の画面（タブレット、小さいラップトップ） */
+        @media (max-width: 1024px) {
+            .app-container {
+                /* 1カラムレイアウトに変更 */
+                grid-template-columns: 1fr;
+                /* サイドバーが上、チャットが下 */
+                grid-template-rows: auto 1fr;
+            }
+            .sidebar {
+                /* 縦並びを横並びに変更 */
+                flex-direction: row;
+                flex-wrap: wrap; /* 折り返しを許可 */
+                justify-content: center;
+                border-right: none;
+                border-bottom: 1px solid var(--border-color);
+                height: auto; /* 高さを自動に */
+                overflow-y: visible;
+            }
+            .status-block {
+                flex-grow: 1; /* 各ブロックが均等に広がるように */
+                min-width: 280px; /* 最低幅を確保 */
+            }
+        }
+
+        /* 768px以下の画面（スマートフォンなど） */
+        @media (max-width: 768px) {
+            html { font-size: 14px; } /* 全体のフォントサイズを少し小さく */
+            .sidebar { padding: 10px; gap: 10px; }
+            .status-block { padding: 10px; }
+            .chat-messages { padding: 10px; }
+            .chat-input-form { padding: 10px; }
+            .message { max-width: 95%; } /* メッセージ幅を広げる */
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="status-block">
+                <h3>CORE STATUS</h3>
+                <div class="status-item"><span>STATUS:</span> <span id="status-indicator">...</span></div>
+                <div class="status-item"><span>MODEL:</span> <span id="model-indicator">...</span></div>
+            </div>
+            <div class="status-block">
+                <h3>API QUOTA</h3>
+                <div class="status-item"><span>RPM:</span> <span id="rpm-indicator">--/--</span></div>
+                <div class="status-item"><span>RESET IN:</span> <span id="reset-timer">--s</span></div>
+            </div>
+            <div class="status-block">
+                <h3>PERFORMANCE</h3>
+                <div class="status-item"><span>LATENCY:</span> <span id="latency-now">--ms</span></div>
+                <div class="status-item"><span>AVG LATENCY:</span> <span id="latency-avg">--ms</span></div>
+            </div>
+            <div class="status-block">
+                <h3>RPM USAGE (LAST 60S)</h3>
+                <div class="graph-container" id="rpmGraph"></div>
+            </div>
+            <div class="status-block">
+                <h3>LATENCY (LAST 20 REQS)</h3>
+                <div class="graph-container" id="latencyGraph"></div>
+            </div>
+        </aside>
+        <main class="chat-container">
+            <div class="chat-messages" id="chatMessages"></div>
+            <form class="chat-input-form" id="chatForm">
+                <textarea id="userInput" placeholder="Enter message..." rows="1"></textarea>
+                <button id="sendBtn" type="submit">SEND</button>
+            </form>
+            <footer class="footer">© 底原 永和</footer>
+        </main>
+    </div>
+    <script type="module">
+        // ★★★ ここにGASのデプロイURLを設定 ★★★
+        const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxbPLy7G5wi2qFv_yr7QTtBU-aVpn3XFKSzrH7gYGjeDXvhGfjJMq2w8r-tgIJcBUhv/exec"; // 例: "https://script.google.com/macros/s/AKfycbz_YOUR_DEPLOYMENT_ID/exec"
+
+        const CONFIG = {
+            MODEL_NAME: "gemini-1.5-flash-latest",
+            RPM_LIMIT: 15, // 1分間あたりのリクエスト数 (フロントエンドでの制限)
+            LATENCY_GRAPH_ITEMS: 20
+        };
+        const dom = {
+            status: document.getElementById('status-indicator'), model: document.getElementById('model-indicator'),
+            rpm: document.getElementById('rpm-indicator'), resetTimer: document.getElementById('reset-timer'),
+            latencyNow: document.getElementById('latency-now'), latencyAvg: document.getElementById('latency-avg'),
+            rpmGraph: document.getElementById('rpmGraph'), latencyGraph: document.getElementById('latencyGraph'),
+            chatMessages: document.getElementById('chatMessages'), chatForm: document.getElementById('chatForm'),
+            userInput: document.getElementById('userInput'), sendBtn: document.getElementById('sendBtn'),
+        };
+        const state = { chatHistory: [], sessionRequestCount: 0, requestTimestamps: [], latencyHistory: [], totalLatency: 0 };
+
+        const ui = {
+            updateStatus(text, className) { dom.status.textContent = text; dom.status.className = className; },
+            addMessage(role, text) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${role}-message`;
+                const header = role === 'user' ? 'YOU' : 'AI';
+                // テキストを安全に表示するため、innerHTMLではなくtextContentを使うか、エスケープを強化
+                const bubbleContent = document.createElement('div');
+                bubbleContent.className = 'message-bubble';
+                bubbleContent.textContent = text; //textContentでXSS対策
+                
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'message-header';
+                headerDiv.textContent = header;
+
+                messageDiv.appendChild(headerDiv);
+                messageDiv.appendChild(bubbleContent);
+                dom.chatMessages.appendChild(messageDiv);
+                dom.chatMessages.scrollTop = dom.chatMessages.scrollHeight;
+            },
+            updateQuota() {
+                const now = Date.now();
+                // 60秒以上前のタイムスタンプを削除
+                while (state.requestTimestamps.length > 0 && state.requestTimestamps[0] < now - 60000) {
+                    state.requestTimestamps.shift();
+                }
+                const currentRPM = state.requestTimestamps.length;
+                dom.rpm.textContent = `${CONFIG.RPM_LIMIT - currentRPM} / ${CONFIG.RPM_LIMIT}`;
+                return currentRPM < CONFIG.RPM_LIMIT;
+            },
+            updateTimer() {
+                if (state.requestTimestamps.length > 0) {
+                    const oldestRequestTime = state.requestTimestamps[0];
+                    const timePassed = (Date.now() - oldestRequestTime) / 1000;
+                    const timeLeft = Math.max(0, 60 - timePassed);
+                    dom.resetTimer.textContent = `${timeLeft.toFixed(0)}s`;
+                } else {
+                    dom.resetTimer.textContent = '--s';
+                }
+            },
+            updateLatency(newLatency) {
+                state.latencyHistory.push(newLatency);
+                if (state.latencyHistory.length > CONFIG.LATENCY_GRAPH_ITEMS) state.latencyHistory.shift();
+                
+                // 初回リクエストでtotalLatencyが0の場合の処理
+                state.totalLatency += newLatency;
+                state.sessionRequestCount++; // リクエスト成功時のみカウントアップ
+                
+                const avgLatency = state.totalLatency / state.sessionRequestCount;
+                dom.latencyNow.textContent = `${newLatency}ms`;
+                dom.latencyAvg.textContent = `${avgLatency.toFixed(0)}ms`;
+                this.drawGraph(dom.latencyGraph, state.latencyHistory, '#ccc');
+            },
+            updateRpmGraph(requestsPerSecond) { this.drawGraph(dom.rpmGraph, requestsPerSecond, '#666'); },
+            initGraph(container, count) {
+                container.innerHTML = '';
+                for (let i = 0; i < count; i++) {
+                    const bar = document.createElement('div');
+                    bar.className = 'graph-bar';
+                    container.appendChild(bar);
+                }
+            },
+            drawGraph(container, data, color) {
+                const bars = container.children;
+                const max = Math.max(1, ...data); // 最小値が1になるように調整して0除算を防ぐ
+                
+                // データがグラフのバーの数より少ない場合、先頭を0で埋める
+                const paddedData = [...new Array(bars.length - data.length).fill(0), ...data];
+
+                paddedData.forEach((value, i) => {
+                    if (bars[i]) {
+                        bars[i].style.height = `${(value / max) * 100}%`;
+                        bars[i].style.backgroundColor = color;
+                    }
+                });
+            }
+        };
+
+        const historyManager = {
+            load: () => JSON.parse(localStorage.getItem('geminiChatHistoryV6') || '[]'), // GAS対応でバージョンアップ
+            save: (history) => localStorage.setItem('geminiChatHistoryV6', JSON.stringify(history)),
+        };
+
+        async function handleChatSubmit(e) {
+            e.preventDefault();
+            const prompt = dom.userInput.value.trim();
+            if (!prompt || dom.sendBtn.disabled) return;
+            
+            // フロントエンドでのRPM制限チェック
+            if (!ui.updateQuota()) {
+                ui.updateStatus('LIMITED', 'limited');
+                ui.addMessage('ai', `// ERROR\nAPI Rate Limit Exceeded (RPM: ${CONFIG.RPM_LIMIT}). Please wait a moment.`);
+                return;
+            }
+            
+            dom.sendBtn.disabled = true;
+            dom.userInput.value = '';
+            dom.userInput.style.height = 'auto';
+            ui.updateStatus('THINKING', 'thinking');
+            ui.addMessage('user', prompt);
+            
+            const startTime = Date.now();
+            try {
+                // GASエンドポイントへのリクエスト
+                const response = await fetch(GAS_WEB_APP_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: prompt,
+                        history: state.chatHistory.map(item => ({
+                            role: item.role,
+                            parts: [{ text: item.parts[0].text }]
+                        }))
+                    })
+                });
+
+                const latency = Date.now() - startTime;
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                state.requestTimestamps.push(Date.now()); // 成功したリクエストのみタイムスタンプを記録
+
+                const aiResponseText = data.response;
+                ui.addMessage('ai', aiResponseText);
+                ui.updateLatency(latency);
+                
+                // 会話履歴を更新
+                state.chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+                state.chatHistory.push({ role: "model", parts: [{ text: aiResponseText }] });
+                historyManager.save(state.chatHistory);
+                
+                ui.updateStatus('ONLINE', 'online');
+
+            } catch (error) {
+                console.error("Fetch Error:", error);
+                ui.addMessage('ai', `// ERROR\n${error.message}`);
+                ui.updateStatus('ERROR', 'error');
+                dom.latencyNow.textContent = '--ms';
+            } finally {
+                dom.sendBtn.disabled = false;
+                dom.userInput.focus();
+                ui.updateQuota();
+            }
+        }
+
+        async function initialize() {
+            if (!GAS_WEB_APP_URL || GAS_WEB_APP_URL === "あなたのGASデプロイURLをここに貼り付けてください") {
+                ui.addMessage('ai', 'SYSTEM ERROR: GAS_WEB_APP_URL is not configured. Please set the deployed GAS URL.');
+                return ui.updateStatus('OFFLINE', 'error');
+            }
+            
+            dom.model.textContent = CONFIG.MODEL_NAME;
+            ui.initGraph(dom.rpmGraph, 60);
+            ui.initGraph(dom.latencyGraph, CONFIG.LATENCY_GRAPH_ITEMS);
+            ui.updateStatus('INITIALIZING', 'thinking');
+
+            // 履歴のロードと表示
+            state.chatHistory = historyManager.load();
+            state.chatHistory.forEach(item => ui.addMessage(item.role === 'user' ? 'user' : 'ai', item.parts[0].text));
+            
+            dom.chatForm.addEventListener('submit', handleChatSubmit);
+            dom.userInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); dom.chatForm.requestSubmit(); }
+            });
+            dom.userInput.addEventListener('input', () => { dom.userInput.style.height = 'auto'; dom.userInput.style.height = `${dom.userInput.scrollHeight}px`; });
+
+            const requestsPerSecond = new Array(60).fill(0);
+            setInterval(() => {
+                const lastSecondRequests = state.requestTimestamps.filter(t => t > Date.now() - 1000).length;
+                requestsPerSecond.shift();
+                requestsPerSecond.push(lastSecondRequests);
+
+                ui.updateRpmGraph(requestsPerSecond);
+                ui.updateQuota();
+                ui.updateTimer();
+            }, 1000);
+            
+            ui.updateStatus('ONLINE', 'online');
+            ui.updateQuota();
+        }
+
+        initialize();
+    </script>
+</body>
+</html>
